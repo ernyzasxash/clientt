@@ -909,6 +909,10 @@ void CHudSpectator::SetModes(int iNewMainMode, int iNewInsetMode)
 		// if we are NOT in HLTV mode, main spectator mode is set on server
 		if ( !gEngfuncs.IsSpectateOnly() )
 		{
+			char cmdstring[32];
+			// forward command to server
+			sprintf(cmdstring,"specmode %i",iNewMainMode );
+			gEngfuncs.pfnServerCmd(cmdstring);
 			return;
 		}
 
@@ -1219,7 +1223,7 @@ void CHudSpectator::DrawOverviewLayer()
 		yTiles = 6;
 	}
 
-	screenaspect = ScreenWidth/ScreenHeight;
+	screenaspect = 4.0f/3.0f;
 
 
 	xs = m_OverviewData.origin[0];
