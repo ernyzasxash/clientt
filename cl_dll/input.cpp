@@ -23,9 +23,15 @@
 #include "view.h"
 #include <string.h>
 #include <ctype.h>
-
+#include "pm_shared.h"
 #include "vgui_parser.h"
 #include "com_weapons.h"
+
+#include <cmath>  // sin, cos, sqrt, atan2, fabs
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 extern int g_weaponselect;
 extern cl_enginefunc_t gEngfuncs;
@@ -64,6 +70,11 @@ cvar_t	*cl_yawspeed;
 cvar_t	*cl_pitchspeed;
 cvar_t	*cl_anglespeedkey;
 cvar_t	*cl_vsmoothing;
+cvar_t  *cl_strafe;
+cvar_t  *cl_strafe_dir;
+cvar_t  *cl_strafe_sidemove;
+cvar_t  *cl_strafe_angle;
+cvar_t  *cl_strafe_speed;
 /*
 ===============================================================================
 
@@ -703,6 +714,119 @@ void CL_AdjustAngles ( float frametime, float *viewangles )
 		viewangles[ROLL] = -50;
 }
 
+#define POW(x) ((x)*(x))
+void StrafeHack(usercmd_t* cmd)
+{
+    if (!(pmove->flags & FL_ONGROUND) && (pmove->movetype != 5))
+    {
+        float speed;
+        speed = (sqrt(POW(pmove->velocity[0]) + POW(pmove->velocity[1])) < 15);
+        float dir = 0.0f;
+        int dir_value = cl_strafe_dir->value;
+        if (dir_value == 1)
+            dir = 0 * M_PI / 180.0f;
+        else if (dir_value == 2)
+            dir = 90 * M_PI / 180.0f;
+        else if (dir_value == 3)
+            dir = 180 * M_PI / 180.0f;
+        else if (dir_value == 4)
+            dir = -90 * M_PI / 180.0f;
+        if (speed)
+        {
+            if (cmd->buttons & IN_FORWARD)
+            {
+                if (cmd->buttons & IN_MOVELEFT)
+                {
+                    cmd->forwardmove = 900;
+                    cmd->sidemove = -900;
+                }
+                else if (cmd->buttons & IN_MOVERIGHT)
+                {
+                    cmd->forwardmove = 900;
+                    cmd->sidemove = 900;
+                }
+                else
+                    cmd->forwardmove = 900;
+            }
+            else if (cmd->buttons & IN_BACK)
+            {
+                if (cmd->buttons & IN_MOVELEFT)
+                {
+                    cmd->forwardmove = -900;
+                    cmd->sidemove = -900;
+                }
+                else if (cmd->buttons & IN_MOVERIGHT)
+                {
+                    cmd->forwardmove = -900;
+                    cmd->sidemove = 900;
+                }
+                else
+                    cmd->forwardmove = -900;
+            }
+            else if (cmd->buttons & IN_MOVELEFT)
+                cmd->sidemove = -900;
+            else if (cmd->buttons & IN_MOVERIGHT)
+                cmd->sidemove = 900;
+            else
+                cmd->forwardmove = 900;
+        }
+        else
+        {
+            float va_speed = atan2(pmove->velocity[1], pmove->velocity[0]);
+            vec3_t viewangles;
+	    gEngfuncs.GetViewAngles( (float *)viewangles );
+            float adif = va_speed - viewangles[1] * M_PI / 180.0f - dir;
+            adif = sin(adif);
+            adif = atan2(adif, sqrt(1 - adif * adif));
+            cmd->sidemove = (cl_strafe_sidemove->value) * (adif > 0 ? -1 : 1);
+            cmd->forwardmove = 0;
+            float angle;
+            float osin, ocos, nsin, ncos;
+            angle = viewangles[1] * M_PI / 180.0f;
+            osin = sin(angle);
+            ocos = cos(angle);
+            angle = 2.0f * viewangles[1] * M_PI / 180.0f - va_speed + dir;
+            nsin = sin(angle);
+            ncos = cos(angle);
+            cmd->forwardmove = cmd->sidemove * (osin * ncos - ocos * nsin);
+            cmd->sidemove *= osin * nsin + ocos * ncos;
+            float fs = 0;
+            if (atan2(cl_strafe_angle->value / va_speed, 1.0) >= fabs(adif))
+            {
+                Vector vBodyDirection;
+                if (dir_value & 1)
+                    vBodyDirection = pmove->forward;
+                else
+                    vBodyDirection = pmove->right;
+                vBodyDirection[2] = 0;
+                float vel = POW(vBodyDirection[0] * pmove->velocity[0]) + POW(vBodyDirection[1] * pmove->velocity[1]);
+                fs = sqrt(cl_strafe_speed->value * 100000 / vel);
+            }
+            cmd->forwardmove += fs;
+        }
+        float sdmw = cmd->sidemove;
+        float fdmw = cmd->forwardmove;
+        switch ((int)cl_strafe_dir->value)
+        {
+        case 1:
+            cmd->forwardmove = fdmw;
+            cmd->sidemove = sdmw;
+            break;
+        case 2:
+            cmd->forwardmove = -sdmw;
+            cmd->sidemove = fdmw;
+            break;
+        case 3:
+            cmd->forwardmove = -fdmw;
+            cmd->sidemove = -sdmw;
+            break;
+        case 4:
+            cmd->forwardmove = sdmw;
+            cmd->sidemove = -fdmw;
+            break;
+        }
+    }
+}
 /*
 ================
 CL_CreateMove
@@ -741,6 +865,11 @@ void DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int activ
 
 		cmd->upmove += cl_upspeed->value * CL_KeyState (&in_up);
 		cmd->upmove -= cl_upspeed->value * CL_KeyState (&in_down);
+
+		if (cl_strafe && cl_strafe->value == 1)
+		{
+    			StrafeHack(cmd);
+		}
 
 		if ( !(in_klook.state & 1 ) )
 		{	
@@ -1052,6 +1181,12 @@ void InitInput (void)
 	cl_pitchdown		= gEngfuncs.pfnRegisterVariable ( "cl_pitchdown", "89", 0 );
 
 	cl_vsmoothing		= gEngfuncs.pfnRegisterVariable ( "cl_vsmoothing", "0.05", FCVAR_ARCHIVE );
+
+	cl_strafe_dir      = gEngfuncs.pfnRegisterVariable("cl_strafe_dir", "3", FCVAR_PROTECTED);
+	cl_strafe_sidemove = gEngfuncs.pfnRegisterVariable("cl_strafe_sidemove", "450", FCVAR_PROTECTED);
+	cl_strafe_angle    = gEngfuncs.pfnRegisterVariable("cl_strafe_angle", "30", FCVAR_PROTECTED);
+	cl_strafe_speed    = gEngfuncs.pfnRegisterVariable("cl_strafe_speed", "70", FCVAR_PROTECTED);
+	cl_strafe	   = gEngfuncs.pfnRegisterVariable("cl_strafe", "0", FCVAR_PROTECTED);
 
 	autofuncs::cl_autojump = gEngfuncs.pfnRegisterVariable ( "cl_autojump", "0", FCVAR_ARCHIVE );
 
