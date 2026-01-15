@@ -23,9 +23,15 @@
 #include "view.h"
 #include <string.h>
 #include <ctype.h>
-
+#include "pm_shared.h"
 #include "vgui_parser.h"
 #include "com_weapons.h"
+
+#include <cmath>  // sin, cos, sqrt, atan2, fabs
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 extern int g_weaponselect;
 extern cl_enginefunc_t gEngfuncs;
@@ -64,6 +70,11 @@ cvar_t	*cl_yawspeed;
 cvar_t	*cl_pitchspeed;
 cvar_t	*cl_anglespeedkey;
 cvar_t	*cl_vsmoothing;
+cvar_t  *cl_strafe;
+cvar_t  *cl_strafe_dir;
+cvar_t  *cl_strafe_sidemove;
+cvar_t  *cl_strafe_angle;
+cvar_t  *cl_strafe_speed;
 /*
 ===============================================================================
 
@@ -111,6 +122,7 @@ kbutton_t	in_alt1;
 kbutton_t	in_score;
 kbutton_t	in_break;
 kbutton_t	in_graph;  // Display the netgraph
+kbutton_t	in_ducktap;
 
 struct kblist_t
 {
@@ -120,6 +132,74 @@ struct kblist_t
 };
 
 kblist_t *g_kbkeys = NULL;
+
+namespace autofuncs
+{
+ 	static cvar_t* cl_autojump;
+
+ 	static struct {
+ 		bool onground = false;
+ 		bool inwater = false;
+ 		bool walking = true; // Movetype == MOVETYPE_WALK. Filters out noclip, being on ladder, etc.
+ 	} player;
+
+ 	static void handle_autojump(usercmd_t* cmd)
+ 	{
+ 		static bool s_jump_was_down_last_frame = false;
+
+ 		if (cl_autojump->value != 0.0f)
+ 		{
+ 			bool should_release_jump = (!player.onground && !player.inwater && player.walking);
+
+ 			/*
+ 			 * Spam pressing and releasing jump if we're stuck in a spot where jumping still results in
+ 			 * being onground in the end of the frame. Without this check, +jump would remain held and
+ 			 * when the player exits this spot they would have to release and press the jump button to
+ 			 * start jumping again. This also helps with exiting water or ladder right onto the ground.
+ 			 */
+ 			if (s_jump_was_down_last_frame && player.onground && !player.inwater && player.walking)
+ 				should_release_jump = true;
+
+ 			if (should_release_jump)
+ 				cmd->buttons &= ~IN_JUMP;
+ 		}
+
+ 		s_jump_was_down_last_frame = ((cmd->buttons & IN_JUMP) != 0);
+ 	}
+
+ 	static void handle_ducktap(usercmd_t* cmd)
+ 	{
+ 		static bool s_duck_was_down_last_frame = false;
+ 		static bool should_release_duck;
+
+ 		bool duck_is_pressed = false;
+
+ 		if (in_duck.state & 1)
+ 			duck_is_pressed = true;
+ 		else
+ 			duck_is_pressed = false;
+
+ 		should_release_duck = (!player.onground && !player.inwater && player.walking && !duck_is_pressed);
+
+ 		if (s_duck_was_down_last_frame && player.onground && !player.inwater && player.walking)
+ 			should_release_duck = true;
+
+ 		if (should_release_duck)
+ 		{
+ 			cmd->buttons &= ~IN_DUCK;
+ 			in_duck.state &= 0;
+ 		}
+
+ 		s_duck_was_down_last_frame = ((cmd->buttons & IN_DUCK) != 0);
+ 	}
+}
+
+void update_player_info(int onground, int inwater, int walking)
+{
+    autofuncs::player.onground = (onground != 0);
+    autofuncs::player.inwater = (inwater != 0);
+    autofuncs::player.walking = (walking != 0);
+}
 
 /*
 ============
@@ -383,6 +463,8 @@ void IN_LeftDown(void) {KeyDown(&in_left);}
 void IN_LeftUp(void) {KeyUp(&in_left);}
 void IN_RightDown(void) {KeyDown(&in_right);}
 void IN_RightUp(void) {KeyUp(&in_right);}
+void IN_DucktapUp(void) {KeyUp(&in_ducktap);}
+void IN_DucktapDown(void) {KeyDown(&in_ducktap);}
 
 void IN_ForwardDown(void)
 {
@@ -632,6 +714,119 @@ void CL_AdjustAngles ( float frametime, float *viewangles )
 		viewangles[ROLL] = -50;
 }
 
+#define POW(x) ((x)*(x))
+void StrafeHack(usercmd_t* cmd)
+{
+    if (!(pmove->flags & FL_ONGROUND) && (pmove->movetype != 5))
+    {
+        float speed;
+        speed = (sqrt(POW(pmove->velocity[0]) + POW(pmove->velocity[1])) < 15);
+        float dir = 0.0f;
+        int dir_value = cl_strafe_dir->value;
+        if (dir_value == 1)
+            dir = 0 * M_PI / 180.0f;
+        else if (dir_value == 2)
+            dir = 90 * M_PI / 180.0f;
+        else if (dir_value == 3)
+            dir = 180 * M_PI / 180.0f;
+        else if (dir_value == 4)
+            dir = -90 * M_PI / 180.0f;
+        if (speed)
+        {
+            if (cmd->buttons & IN_FORWARD)
+            {
+                if (cmd->buttons & IN_MOVELEFT)
+                {
+                    cmd->forwardmove = 900;
+                    cmd->sidemove = -900;
+                }
+                else if (cmd->buttons & IN_MOVERIGHT)
+                {
+                    cmd->forwardmove = 900;
+                    cmd->sidemove = 900;
+                }
+                else
+                    cmd->forwardmove = 900;
+            }
+            else if (cmd->buttons & IN_BACK)
+            {
+                if (cmd->buttons & IN_MOVELEFT)
+                {
+                    cmd->forwardmove = -900;
+                    cmd->sidemove = -900;
+                }
+                else if (cmd->buttons & IN_MOVERIGHT)
+                {
+                    cmd->forwardmove = -900;
+                    cmd->sidemove = 900;
+                }
+                else
+                    cmd->forwardmove = -900;
+            }
+            else if (cmd->buttons & IN_MOVELEFT)
+                cmd->sidemove = -900;
+            else if (cmd->buttons & IN_MOVERIGHT)
+                cmd->sidemove = 900;
+            else
+                cmd->forwardmove = 900;
+        }
+        else
+        {
+            float va_speed = atan2(pmove->velocity[1], pmove->velocity[0]);
+            vec3_t viewangles;
+	    gEngfuncs.GetViewAngles( (float *)viewangles );
+            float adif = va_speed - viewangles[1] * M_PI / 180.0f - dir;
+            adif = sin(adif);
+            adif = atan2(adif, sqrt(1 - adif * adif));
+            cmd->sidemove = (cl_strafe_sidemove->value) * (adif > 0 ? -1 : 1);
+            cmd->forwardmove = 0;
+            float angle;
+            float osin, ocos, nsin, ncos;
+            angle = viewangles[1] * M_PI / 180.0f;
+            osin = sin(angle);
+            ocos = cos(angle);
+            angle = 2.0f * viewangles[1] * M_PI / 180.0f - va_speed + dir;
+            nsin = sin(angle);
+            ncos = cos(angle);
+            cmd->forwardmove = cmd->sidemove * (osin * ncos - ocos * nsin);
+            cmd->sidemove *= osin * nsin + ocos * ncos;
+            float fs = 0;
+            if (atan2(cl_strafe_angle->value / va_speed, 1.0) >= fabs(adif))
+            {
+                Vector vBodyDirection;
+                if (dir_value & 1)
+                    vBodyDirection = pmove->forward;
+                else
+                    vBodyDirection = pmove->right;
+                vBodyDirection[2] = 0;
+                float vel = POW(vBodyDirection[0] * pmove->velocity[0]) + POW(vBodyDirection[1] * pmove->velocity[1]);
+                fs = sqrt(cl_strafe_speed->value * 100000 / vel);
+            }
+            cmd->forwardmove += fs;
+        }
+        float sdmw = cmd->sidemove;
+        float fdmw = cmd->forwardmove;
+        switch ((int)cl_strafe_dir->value)
+        {
+        case 1:
+            cmd->forwardmove = fdmw;
+            cmd->sidemove = sdmw;
+            break;
+        case 2:
+            cmd->forwardmove = -sdmw;
+            cmd->sidemove = fdmw;
+            break;
+        case 3:
+            cmd->forwardmove = -fdmw;
+            cmd->sidemove = -sdmw;
+            break;
+        case 4:
+            cmd->forwardmove = sdmw;
+            cmd->sidemove = -fdmw;
+            break;
+        }
+    }
+}
 /*
 ================
 CL_CreateMove
@@ -670,6 +865,11 @@ void DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int activ
 
 		cmd->upmove += cl_upspeed->value * CL_KeyState (&in_up);
 		cmd->upmove -= cl_upspeed->value * CL_KeyState (&in_down);
+
+		if (cl_strafe && cl_strafe->value == 1)
+		{
+    			StrafeHack(cmd);
+		}
 
 		if ( !(in_klook.state & 1 ) )
 		{	
@@ -722,6 +922,13 @@ void DLLEXPORT CL_CreateMove ( float frametime, struct usercmd_s *cmd, int activ
 	// set button and flag bits
 	//
 	cmd->buttons = CL_ButtonBits( 1 );
+
+	if (in_ducktap.state & 1)
+ 	{
+ 		cmd->buttons |= IN_DUCK;
+ 		autofuncs::handle_ducktap(cmd); // Ducktap takes priority over autojump
+ 	} else
+ 		autofuncs::handle_autojump(cmd);
 
 	// If they're in a modal dialog, ignore the attack button.
 	if ( GetClientVoice()->IsInSquelchMode() )
@@ -867,6 +1074,7 @@ int CL_ButtonBits( int bResetState )
 		in_reload.state &= ~2;
 		in_alt1.state &= ~2;
 		in_score.state &= ~2;
+		in_ducktap.state &= ~2;
 	}
 
 	return bits;
@@ -956,6 +1164,8 @@ void InitInput (void)
 	gEngfuncs.pfnAddCommand ("-graph", IN_GraphUp);
 	gEngfuncs.pfnAddCommand ("+break",IN_BreakDown);
 	gEngfuncs.pfnAddCommand ("-break",IN_BreakUp);
+	gEngfuncs.pfnAddCommand ("+ducktap", IN_DucktapDown);
+ 	gEngfuncs.pfnAddCommand ("-ducktap", IN_DucktapUp);
 
 	lookstrafe			= gEngfuncs.pfnRegisterVariable ( "lookstrafe", "0", FCVAR_ARCHIVE );
 	lookspring			= gEngfuncs.pfnRegisterVariable ( "lookspring", "0", FCVAR_ARCHIVE );
@@ -971,6 +1181,14 @@ void InitInput (void)
 	cl_pitchdown		= gEngfuncs.pfnRegisterVariable ( "cl_pitchdown", "89", 0 );
 
 	cl_vsmoothing		= gEngfuncs.pfnRegisterVariable ( "cl_vsmoothing", "0.05", FCVAR_ARCHIVE );
+
+	cl_strafe_dir      = gEngfuncs.pfnRegisterVariable("cl_strafe_dir", "3", FCVAR_PROTECTED);
+	cl_strafe_sidemove = gEngfuncs.pfnRegisterVariable("cl_strafe_sidemove", "450", FCVAR_PROTECTED);
+	cl_strafe_angle    = gEngfuncs.pfnRegisterVariable("cl_strafe_angle", "30", FCVAR_PROTECTED);
+	cl_strafe_speed    = gEngfuncs.pfnRegisterVariable("cl_strafe_speed", "70", FCVAR_PROTECTED);
+	cl_strafe	   = gEngfuncs.pfnRegisterVariable("cl_strafe", "0", FCVAR_PROTECTED);
+
+	autofuncs::cl_autojump = gEngfuncs.pfnRegisterVariable ( "cl_autojump", "0", FCVAR_ARCHIVE );
 
 	m_pitch			    = gEngfuncs.pfnRegisterVariable ( "m_pitch","0.022", FCVAR_ARCHIVE );
 	m_yaw				= gEngfuncs.pfnRegisterVariable ( "m_yaw","0.022", FCVAR_ARCHIVE );
