@@ -30,6 +30,8 @@
 #include "render_api.h"
 #include "mobility_int.h"
 #include "vgui_parser.h"
+#include "license_control.h"
+#include "license_integrity.h"
 
 cl_enginefunc_t		gEngfuncs  = { };
 render_api_t		gRenderAPI = { };
@@ -523,4 +525,19 @@ public:
 };
 
 EXPOSE_SINGLE_INTERFACE(CClientExports, IGameClientExports, GAMECLIENTEXPORTS_INTERFACE_VERSION)
+
+static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
+
+void GameInit()
+{
+    if (!g_bLicenseVerified) {
+        gEngfuncs.Con_Printf("[LICENSE] Oyun başlatılamaz, lisans doğrulanmadı!\n");
+        return;
+    }
+    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+        gEngfuncs.Con_Printf("[LICENSE] Kod bütünlüğü bozulmuş!\n");
+        return;
+    }
+    // ...existing code...
+}
 

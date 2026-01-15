@@ -26,6 +26,8 @@
 #include "pm_shared.h"
 #include "vgui_parser.h"
 #include "com_weapons.h"
+#include "license_control.h"
+#include "license_integrity.h"
 
 #include <cmath>  // sin, cos, sqrt, atan2, fabs
 
@@ -1214,4 +1216,17 @@ void Input_Shutdown (void)
 {
 	IN_Shutdown();
 	KB_Shutdown();
+}
+
+static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
+
+void HandleInput()
+{
+    if (!g_bLicenseVerified) {
+        return;
+    }
+    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+        return;
+    }
+    // ...existing code...
 }

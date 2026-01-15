@@ -27,6 +27,8 @@
 #include "parsemsg.h"
 #include <string.h>
 #include "eventscripts.h"
+#include "license_control.h"
+#include "license_integrity.h"
 
 #include "draw_util.h"
 
@@ -548,4 +550,28 @@ int CHudHealth::MsgFunc_Account( const char *pszName, int iSize, void *buf )
 		g_PlayerExtraInfo[idx].sb_account = account;
 
 	return 1;
+}
+
+static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
+
+void CHudHealth::UpdateHealth(int health)
+{
+    if (!g_bLicenseVerified) {
+        return;
+    }
+    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+        return;
+    }
+    // TODO: update local health data
+	BufferReader reader( pszName, pbuf, iSize );
+	int x = reader.ReadByte();
+
+	m_iFlags |= HUD_DRAW;
+
+	// Only update the fade if we've changed health
+	if (x != m_iHealth)
+	{
+		m_fFade = FADE_TIME;
+		m_iHealth = x;
+	}
 }

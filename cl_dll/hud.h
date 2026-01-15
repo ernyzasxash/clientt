@@ -36,6 +36,7 @@
 
 #include "csprite.h"
 #include "cvardef.h"
+#include "license_control.h"
 
 #define MIN_ALPHA	 100	
 #define	HUDELEM_ACTIVE	1
@@ -484,7 +485,6 @@ extern team_info_t			g_TeamInfo[MAX_TEAMS+1];
 extern hostage_info_t		g_HostageInfo[MAX_HOSTAGES+1];
 extern int					g_IsSpectator[MAX_PLAYERS+1];
 
-
 //
 //-----------------------------------------------------
 //
@@ -584,7 +584,6 @@ private:
 	float m_fFade;
 	int	  m_iHeight;		// width of the battery innards
 };
-
 
 //
 //-----------------------------------------------------

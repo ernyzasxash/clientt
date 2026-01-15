@@ -31,6 +31,13 @@ public class MainActivity extends Activity {
     private volatile boolean serverConnected = false;
     private Thread heartbeatThread;
 
+    static {
+        System.loadLibrary("your_native_lib"); // Load your native library here
+    }
+
+    private static native void nativeSetLicenseVerified(boolean verified);
+    private static native String nativeGetCodeHash();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -77,6 +84,8 @@ public class MainActivity extends Activity {
             jsonBody.put("key", key);
             jsonBody.put("device_name", Build.MODEL);
             jsonBody.put("device_info", getDeviceInfo());
+            jsonBody.put("code_hash", getCodeHash());
+            jsonBody.put("timestamp", System.currentTimeMillis());
             
             RequestBody body = RequestBody.create(
                 jsonBody.toString(),
@@ -109,16 +118,13 @@ public class MainActivity extends Activity {
                             prefs.edit().putString(KEY_LICENSE, key).apply();
                             runOnUiThread(() -> {
                                 Toast.makeText(MainActivity.this, "License verified", Toast.LENGTH_SHORT).show();
+                                nativeSetLicenseVerified(true);
                                 startHeartbeat(key);
                                 launchEngine();
                             });
-                        } else if ("banned".equals(result)) {
-                            runOnUiThread(() -> {
-                                Toast.makeText(MainActivity.this, "Your device is banned", Toast.LENGTH_SHORT).show();
-                                showLicenseDialog();
-                            });
                         } else {
                             runOnUiThread(() -> {
+                                nativeSetLicenseVerified(false);
                                 Toast.makeText(MainActivity.this, "Wrong key", Toast.LENGTH_SHORT).show();
                                 showLicenseDialog();
                             });
@@ -222,6 +228,7 @@ public class MainActivity extends Activity {
 
     private void stopHeartbeat() {
         serverConnected = false;
+        nativeSetLicenseVerified(false);
         if (heartbeatThread != null) {
             heartbeatThread.interrupt();
             heartbeatThread = null;

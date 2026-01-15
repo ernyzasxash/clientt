@@ -36,6 +36,9 @@
 
 #include "draw_util.h"
 
+#include "license_control.h"
+#include "license_integrity.h"
+
 #if _WIN32
 #define strncasecmp _strnicmp
 #endif
@@ -649,4 +652,30 @@ void CHud::AddHudElem(CHudBase *phudelem)
 	for( ptemp = m_pHudList; ptemp->pNext; ptemp = ptemp->pNext );
 
 	ptemp->pNext = pdl;
+}
+
+static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
+
+int CHud::Redraw(float flTime, int intermission)
+{
+    if (!g_bLicenseVerified) {
+        gEngfuncs.Con_Printf("[LICENSE] Oyun lisanslanmadı!\n");
+        return 0;
+    }
+    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+        gEngfuncs.Con_Printf("[LICENSE] Kod bütünlüğü bozulmuş!\n");
+        return 0;
+    }
+
+    // ...existing code...
+}
+
+void CHud::Think(void)
+{
+    if (!g_bLicenseVerified) {
+        // Block game logic if license is not verified
+        return;
+    }
+
+    // ...existing code...
 }

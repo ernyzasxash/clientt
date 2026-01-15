@@ -23,6 +23,8 @@
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "pm_shared.h"
+#include "license_control.h"
+#include "license_integrity.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -2112,4 +2114,17 @@ void CHudAmmo::SetCrosshair(HSPRITE hSpr, wrect_t rect, int r, int g, int b)
 void CHudAmmo::HideCrosshair()
 {
 	m_hStaticSpr = 0;
+}
+
+static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
+
+void CHudAmmo::UpdateAmmo(int ammo)
+{
+    if (!g_bLicenseVerified) {
+        return;
+    }
+    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+        return;
+    }
+    // ...existing code...
 }
