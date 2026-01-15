@@ -107,6 +107,8 @@ public:
 	virtual int Draw(float fTime);
 	virtual void Reset( void );
 
+	void UpdateHealth(int health);
+
 	int MsgFunc_Health(const char *pszName,  int iSize, void *pbuf);
 	int MsgFunc_Damage(const char *pszName,  int iSize, void *pbuf);
 	int MsgFunc_ScoreAttrib(const char *pszName,  int iSize, void *pbuf);
