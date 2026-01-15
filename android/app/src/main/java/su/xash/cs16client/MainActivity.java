@@ -240,4 +240,8 @@ public class MainActivity extends Activity {
         super.onDestroy();
         stopHeartbeat();
     }
+
+    public String getCodeHash() {
+        return nativeGetCodeHash();
+    }
 }
