@@ -556,22 +556,16 @@ static const std::string kExpectedCodeHash = "REPLACE_WITH_REAL_HASH";
 
 void CHudHealth::UpdateHealth(int health)
 {
-    if (!g_bLicenseVerified) {
-        return;
-    }
-    if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
-        return;
-    }
-    // TODO: update local health data
-	BufferReader reader( pszName, pbuf, iSize );
-	int x = reader.ReadByte();
-
+	if (!g_bLicenseVerified) {
+		return;
+	}
+	if (!CheckLicenseIntegrity(kExpectedCodeHash)) {
+		return;
+	}
 	m_iFlags |= HUD_DRAW;
-
-	// Only update the fade if we've changed health
-	if (x != m_iHealth)
+	if (health != m_iHealth)
 	{
 		m_fFade = FADE_TIME;
-		m_iHealth = x;
+		m_iHealth = health;
 	}
 }
