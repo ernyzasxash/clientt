@@ -201,6 +201,8 @@ public:
 	CHudUserCmd(Rebuy);
 	CHudUserCmd(Autobuy);
 
+	void UpdateAmmo(int ammo);
+
 private:
 	float m_fFade;
 	RGBA  m_rgba;

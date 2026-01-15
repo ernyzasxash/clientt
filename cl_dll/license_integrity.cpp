@@ -1,7 +1,16 @@
 #include "license_integrity.h"
-#include <openssl/sha.h>
 #include <fstream>
 #include <sstream>
+#include <string>
+#include <stdint.h>
+
+static uint32_t simple_hash(const std::string& data) {
+    uint32_t hash = 5381;
+    for (char c : data) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
 
 std::string CalculateCodeHash() {
     std::ifstream file("/proc/self/exe", std::ios::binary);
@@ -9,12 +18,8 @@ std::string CalculateCodeHash() {
     std::ostringstream oss;
     oss << file.rdbuf();
     std::string data = oss.str();
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256((unsigned char*)data.c_str(), data.size(), hash);
-    std::ostringstream hex;
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
-        hex << std::hex << (int)hash[i];
-    return hex.str();
+    uint32_t hash = simple_hash(data);
+    return std::to_string(hash);
 }
 
 bool CheckLicenseIntegrity(const std::string& expectedHash) {
