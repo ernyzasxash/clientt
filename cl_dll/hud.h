@@ -154,6 +154,7 @@ public:
 	void Reset(void);
 	void SetCrosshair( HSPRITE hSpr, wrect_t rect, int r, int g, int b );
 	void HideCrosshair();
+	void UpdateAmmo(int ammo);
 
 	// replace engine's buggy crosshair
 	void DrawSpriteCrosshair();
@@ -200,8 +201,6 @@ public:
 	CHudUserCmd(Adjust_Crosshair);
 	CHudUserCmd(Rebuy);
 	CHudUserCmd(Autobuy);
-
-	void UpdateAmmo(int ammo);
 
 private:
 	float m_fFade;
