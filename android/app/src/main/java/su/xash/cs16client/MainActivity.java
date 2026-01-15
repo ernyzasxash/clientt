@@ -28,6 +28,9 @@ public class MainActivity extends Activity {
 	private OkHttpClient httpClient = new OkHttpClient();
 	private static final String LICENSE_SERVER = "http://72.60.130.39/check";
 
+    private volatile boolean serverConnected = false;
+    private Thread heartbeatThread;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -106,6 +109,7 @@ public class MainActivity extends Activity {
                             prefs.edit().putString(KEY_LICENSE, key).apply();
                             runOnUiThread(() -> {
                                 Toast.makeText(MainActivity.this, "License verified", Toast.LENGTH_SHORT).show();
+                                startHeartbeat(key);
                                 launchEngine();
                             });
                         } else if ("banned".equals(result)) {
@@ -172,5 +176,61 @@ public class MainActivity extends Activity {
                 .putExtra("license_key", licenseKey)
                 .putExtra("license_verified", true));
         finish();
+    }
+
+    private void startHeartbeat(final String key) {
+        stopHeartbeat();
+        serverConnected = true;
+        heartbeatThread = new Thread(() -> {
+            OkHttpClient client = new OkHttpClient();
+            while (serverConnected) {
+                try {
+                    JSONObject jsonBody = new JSONObject();
+                    jsonBody.put("key", key);
+                    jsonBody.put("device_name", Build.MODEL);
+                    jsonBody.put("device_info", getDeviceInfo());
+                    RequestBody body = RequestBody.create(
+                            jsonBody.toString(),
+                            MediaType.parse("application/json")
+                    );
+                    Request request = new Request.Builder()
+                            .url("http://72.60.130.39/heartbeat")
+                            .post(body)
+                            .build();
+                    okhttp3.Response response = client.newCall(request).execute();
+                    if (!response.isSuccessful()) {
+                        throw new IOException("Unexpected code " + response);
+                    }
+                    response.close();
+                } catch (Exception e) {
+                    serverConnected = false;
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, "No server connection", Toast.LENGTH_SHORT).show();
+                        // Optionally show dialog or block gameplay
+                    });
+                    break;
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {
+                    break;
+                }
+            }
+        });
+        heartbeatThread.start();
+    }
+
+    private void stopHeartbeat() {
+        serverConnected = false;
+        if (heartbeatThread != null) {
+            heartbeatThread.interrupt();
+            heartbeatThread = null;
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopHeartbeat();
     }
 }

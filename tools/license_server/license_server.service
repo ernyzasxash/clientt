@@ -1,0 +1,15 @@
+[Unit]
+Description=License Key Server
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/root/tools/license_server
+Environment=PATH=/root/tools/license_server/venv/bin
+Environment=ADMIN_TOKEN=replace-with-secure-token
+ExecStart=/root/tools/license_server/venv/bin/gunicorn -w 3 -b 0.0.0.0:5000 server:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
